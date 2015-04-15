@@ -29,6 +29,7 @@ var (
 	jsonout           bool
 	failover          bool
 	reset             bool
+	removepod         bool
 	validatesentinels bool
 )
 
@@ -77,6 +78,7 @@ func main() {
 	flag.BoolVar(&info, "info", false, "display pod info screen")
 	flag.BoolVar(&failover, "failover", false, "initiate failover on pod")
 	flag.BoolVar(&reset, "reset", false, "reset pod")
+	flag.BoolVar(&removepod, "removepod", false, "remove pod from ALL sentinels which know about it")
 	flag.BoolVar(&jsonout, "jsonout", false, "output info in JSON format")
 	flag.BoolVar(&validatesentinels, "validatesentinels", false, "check live sentinels vs known")
 	flag.Parse()
@@ -127,5 +129,10 @@ func main() {
 		} else {
 			log.Print("constellation state invalid for the pod")
 		}
+	}
+	if removepod {
+		_, err := Remove(pod)
+		checkError(err)
+		log.Printf("Pod %s was removed from all sentinels", pod.Name)
 	}
 }

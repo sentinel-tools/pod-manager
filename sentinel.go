@@ -142,3 +142,39 @@ func ValidateSentinels(pod *parser.PodConfig) (bool, error) {
 	}
 	return true, nil
 }
+
+// Remove() will attempt to connect to every KnownSentinel and issue a
+// "sentinel remove <podname>", However, since if a KnownSentinel is offline,
+// it will not be told to remove it, this command may not fully clean up a pod.
+// In this scenario you will need to log into the failed sentinel when it comes
+// back up and execute the command there to clean it up.
+func Remove(pod *parser.PodConfig) (bool, error) {
+	sentinels, err := pod.GetSentinels()
+	if err != nil {
+		return false, err
+	}
+	failed := 0
+	for _, s := range sentinels {
+		sc, err := client.DialAddress(s)
+		if err != nil {
+			log.Print(s, err.Error())
+			failed++
+			continue
+		}
+		ok, err := sc.SentinelRemove(pod.Name)
+		if err != nil {
+			log.Print(s, err.Error())
+			failed++
+			continue
+		}
+		if !ok {
+			log.Print("Sentinel replied with unknown status. Manual verification recommended.")
+			failed++
+			continue
+		}
+	}
+	if failed != 0 {
+		return false, fmt.Errorf("Not all sentinels had successful replies. Manual intervention required.")
+	}
+	return true, nil
+}
