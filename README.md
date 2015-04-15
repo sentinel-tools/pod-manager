@@ -1,3 +1,4 @@
+[![Build Status](https://travis-ci.org/sentinel-tools/pod-manager.svg?branch=master)](https://travis-ci.org/sentinel-tools/pod-manager)
 # Pod Manager
 
 The pod-manager tool is intended to provide a CLI Tool to handle some of the
