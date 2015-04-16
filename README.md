@@ -53,6 +53,13 @@ Removing a pod from the sentinel cluster:
 pod-manager -podname=pod1 -removepod
 ```
 
+
+##Validating Authentication
+By passing the '-authcheck' flag pod-manager will attempt to conenct to
+the master and every KnownSlave and issue a ping, authenticating with
+the auth-pass entry. If any instances fail the check results of all
+checks will be displayed.
+
 #Sentinel Validation 
 By passing the `-validatesentinels` flag you can have pod-manager connect to
 each sentinel in the config file and request the master info from them. If any

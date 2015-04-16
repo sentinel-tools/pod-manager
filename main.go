@@ -31,6 +31,7 @@ var (
 	reset             bool
 	removepod         bool
 	validatesentinels bool
+	authcheck         bool
 )
 
 func init() {
@@ -81,6 +82,7 @@ func main() {
 	flag.BoolVar(&removepod, "removepod", false, "remove pod from ALL sentinels which know about it")
 	flag.BoolVar(&jsonout, "jsonout", false, "output info in JSON format")
 	flag.BoolVar(&validatesentinels, "validatesentinels", false, "check live sentinels vs known")
+	flag.BoolVar(&authcheck, "authcheck", false, "test auth to the pod")
 	flag.Parse()
 	if podname == "" {
 		log.Print("Need a podname. Try using '-podname <podname>'")
@@ -134,5 +136,24 @@ func main() {
 		_, err := Remove(pod)
 		checkError(err)
 		log.Printf("Pod %s was removed from all sentinels", pod.Name)
+	}
+	if authcheck {
+		res, err := CheckAuth(pod)
+		if err != nil {
+			log.Print(err)
+			for k, v := range res {
+				log.Printf("[%s] %s: %t", podname, k, v)
+			}
+		} else {
+			log.Print("Auth valid")
+		}
+
+		/*
+			if !ok {
+				log.Printf("Pod '%s' can not be managed by sentinel with the auth given", pod.Name)
+			} else {
+				log.Print("Auth valid")
+			}
+		*/
 	}
 }

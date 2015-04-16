@@ -2,8 +2,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/sentinel-tools/sconf-parser"
 	"github.com/therealbill/libredis/client"
@@ -104,6 +106,46 @@ func LiveSlaves(pod parser.PodConfig) []*client.Redis {
 		live = append(live, sc)
 	}
 	return live
+}
+
+// CheckAuth() will attempt to connect to the master and validate we can auth
+// by issuing a ping
+func CheckAuth(pod *parser.PodConfig) (map[string]bool, error) {
+	addr := fmt.Sprintf("%s:%s", pod.MasterIP, pod.MasterPort)
+	results := make(map[string]bool)
+	invalid := false
+	dc := client.DialConfig{Address: addr, Password: pod.Authpass}
+	c, err := client.DialWithConfig(&dc)
+	if err != nil {
+		if !strings.Contains(err.Error(), "invalid password") {
+			log.Print("Unable to connect to %s. Error: %s", addr, err.Error())
+		}
+		results["master"] = false
+	} else {
+		err = c.Ping()
+		if err != nil {
+			log.Print(err)
+			results["master"] = false
+			invalid = true
+		} else {
+			results["master"] = true
+		}
+	}
+
+	for _, slave := range LiveSlaves(*pod) {
+		sid := fmt.Sprintf(slave.Address())
+		if slave.Ping() != nil {
+			results[sid] = false
+			invalid = true
+			continue
+		} else {
+			results[sid] = true
+		}
+	}
+	if invalid {
+		err = errors.New("At least one node in pod failed auth check")
+	}
+	return results, err
 }
 
 // ValidateSentinels() iterates over KnownSentinels, connecting to each This is
