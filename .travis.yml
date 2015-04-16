@@ -8,4 +8,4 @@ before_install:
 
 after_success:
   - go build 
-  - ghr  --username sentinel-tools --token $GITHUB_TOKEN --replace $(cat .version) pod-manager
+  - ghr  --username sentinel-tools --token $GITHUB_TOKEN $(cat .version) pod-manager
