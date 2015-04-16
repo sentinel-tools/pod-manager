@@ -11,26 +11,23 @@ import (
 	"github.com/therealbill/libredis/client"
 )
 
+var sentinel parser.SentinelConfig
+
 //getPod(podname) returns eitehr an empty Pod struct and error, or a populated
 //PodConfig for the podname given
 func getPod(podname string) (*parser.PodConfig, error) {
 	var pod parser.PodConfig
-
-	if config.UseSentinelConfig {
-		sentinel, err := parser.ParseSentinelConfig(config.SentinelConfigFile)
-		if err != nil {
-			log.Print(err)
-			return &pod, err
-		}
-		pod, err = sentinel.GetPod(podname)
-		if err != nil {
-			log.Fatal(err)
-		}
+	var err error
+	sentinel, err = parser.ParseSentinelConfig(config.SentinelConfigFile)
+	if err != nil {
+		log.Print(err)
 		return &pod, err
 	}
-	if config.UseRedSkull {
-		log.Print("Using RedSkull connection")
+	pod, err = sentinel.GetPod(podname)
+	if err != nil {
+		log.Fatal(err)
 	}
+	return &pod, err
 	return &pod, nil
 }
 
@@ -219,4 +216,64 @@ func Remove(pod *parser.PodConfig) (bool, error) {
 		return false, fmt.Errorf("Not all sentinels had successful replies. Manual intervention required.")
 	}
 	return true, nil
+}
+
+// TreeWalk() will attempt to walk the pod list for a given pod's IPs.  The
+// idea here is to hopefully find all pods which are, due to misconfiguration
+// in sentinel, sharing one or more IPs with this pod.
+func TreeWalk(pod *parser.PodConfig) []parser.PodConfig {
+	fmt.Printf("\nWalking Pod %s\n", pod.Name)
+	iso := true
+	var connecteds []parser.PodConfig
+	for pname, rpod := range sentinel.ManagedPodConfigs {
+		if pname == pod.Name {
+			// skip self
+			continue
+		}
+		master_address := fmt.Sprintf("%s:%s", pod.MasterIP, pod.MasterPort)
+		if pod.MasterIP == rpod.MasterIP {
+			fmt.Printf("[%s] Master IP also listed as master for %s\n", pod.Name, pname)
+			connecteds = append(connecteds, rpod)
+			iso = false
+		}
+		for _, s := range rpod.KnownSlaves {
+			if master_address == s {
+				fmt.Printf("[%s] Master IP is ALSO listed as slave of %s\n", pod.Name, pname)
+				connecteds = append(connecteds, rpod)
+				iso = false
+			}
+		}
+		for _, ms := range pod.KnownSlaves {
+			if strings.Contains(ms, rpod.MasterIP) {
+				fmt.Printf("[%s] Slave IP(%s) also listed as master for %s\n", pod.Name, ms, pname)
+				connecteds = append(connecteds, rpod)
+				iso = false
+			}
+			for _, s := range rpod.KnownSlaves {
+				if ms == s {
+					fmt.Printf("[%s] Slave IP(%s) is ALSO listed as slave of %s\n", pod.Name, ms, pname)
+					connecteds = append(connecteds, rpod)
+					iso = false
+				}
+			}
+		}
+	}
+	if iso {
+		fmt.Printf("[%s] Is properly isolated\n", pod.Name)
+	} else {
+		res, err := CheckAuth(pod)
+		if err != nil {
+			log.Print(err)
+			for k, v := range res {
+				log.Printf("[%s] %s: %t", podname, k, v)
+			}
+		} else {
+			log.Print("Auth valid")
+		}
+		fmt.Printf("These pods are intermingled with %s:\n", pod.Name)
+		for _, mpod := range connecteds {
+			fmt.Printf("\t%s\n", mpod.Name)
+		}
+	}
+	return connecteds
 }

@@ -26,6 +26,7 @@ var enc *json.Encoder
 var (
 	podname           string
 	info              bool
+	walk              bool
 	jsonout           bool
 	failover          bool
 	reset             bool
@@ -83,6 +84,7 @@ func main() {
 	flag.BoolVar(&jsonout, "jsonout", false, "output info in JSON format")
 	flag.BoolVar(&validatesentinels, "validatesentinels", false, "check live sentinels vs known")
 	flag.BoolVar(&authcheck, "authcheck", false, "test auth to the pod")
+	flag.BoolVar(&walk, "walk", false, "walk the config looking for IP pollution")
 	flag.Parse()
 	if podname == "" {
 		log.Print("Need a podname. Try using '-podname <podname>'")
@@ -111,7 +113,6 @@ func main() {
 			}
 			fmt.Printf("cli string: redis-cli -h %s -p %s -a %s\n", pod.MasterIP, pod.MasterPort, pod.Authpass)
 		}
-		return
 	}
 	if failover {
 		err := Failover(pod)
@@ -147,13 +148,30 @@ func main() {
 		} else {
 			log.Print("Auth valid")
 		}
-
-		/*
-			if !ok {
-				log.Printf("Pod '%s' can not be managed by sentinel with the auth given", pod.Name)
-			} else {
-				log.Print("Auth valid")
+	}
+	if walk {
+		walked := make(map[string]bool)
+		c := TreeWalk(pod)
+		if len(c) > 0 {
+			walked[pod.Name] = true
+			for _, mp := range c {
+				_, exists := walked[mp.Name]
+				if exists {
+					continue
+				}
+				//CheckAuth(&mp)
+				d := TreeWalk(&mp)
+				walked[mp.Name] = true
+				for _, w3 := range d {
+					_, exists := walked[w3.Name]
+					if exists {
+						continue
+					}
+					//CheckAuth(&w3)
+					_ = TreeWalk(&w3)
+					walked[w3.Name] = true
+				}
 			}
-		*/
+		}
 	}
 }
