@@ -27,6 +27,7 @@ var (
 	podname           string
 	info              bool
 	walk              bool
+	archive           bool
 	jsonout           bool
 	failover          bool
 	reset             bool
@@ -85,6 +86,7 @@ func main() {
 	flag.BoolVar(&validatesentinels, "validatesentinels", false, "check live sentinels vs known")
 	flag.BoolVar(&authcheck, "authcheck", false, "test auth to the pod")
 	flag.BoolVar(&walk, "walk", false, "walk the config looking for IP pollution")
+	flag.BoolVar(&archive, "archive", false, "on a delete, archive the config befored deleting")
 	flag.Parse()
 	if podname == "" {
 		log.Print("Need a podname. Try using '-podname <podname>'")
@@ -134,6 +136,19 @@ func main() {
 		}
 	}
 	if removepod {
+		if archive {
+			t := template.Must(template.New("podinfo").Parse(PodInfoTemplate))
+			filename := fmt.Sprintf("archive-%s.txt", podname)
+			arcfile, err := os.Create(filename)
+			if err != nil {
+				log.Fatalf("Unable to open %s for writing archive, bailing", filename)
+			}
+			err = t.Execute(arcfile, pod)
+			if err != nil {
+				log.Fatal("executing template:", err)
+			}
+			fmt.Printf("cli string: redis-cli -h %s -p %s -a %s\n", pod.MasterIP, pod.MasterPort, pod.Authpass)
+		}
 		_, err := Remove(pod)
 		checkError(err)
 		log.Printf("Pod %s was removed from all sentinels", pod.Name)
@@ -151,7 +166,7 @@ func main() {
 	}
 	if walk {
 		walked := make(map[string]bool)
-		c := TreeWalk(pod)
+		c := TreeWalk(*pod)
 		if len(c) > 0 {
 			walked[pod.Name] = true
 			for _, mp := range c {
@@ -160,7 +175,7 @@ func main() {
 					continue
 				}
 				//CheckAuth(&mp)
-				d := TreeWalk(&mp)
+				d := TreeWalk(mp)
 				walked[mp.Name] = true
 				for _, w3 := range d {
 					_, exists := walked[w3.Name]
@@ -168,7 +183,7 @@ func main() {
 						continue
 					}
 					//CheckAuth(&w3)
-					_ = TreeWalk(&w3)
+					_ = TreeWalk(w3)
 					walked[w3.Name] = true
 				}
 			}

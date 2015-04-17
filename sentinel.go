@@ -95,7 +95,7 @@ func LiveSlaves(pod parser.PodConfig) []*client.Redis {
 	slaves := pod.KnownSlaves
 	var live []*client.Redis
 	for _, s := range slaves {
-		sc, err := client.DialAddress(s)
+		sc, err := client.DialWithConfig(&client.DialConfig{Address: s, Password: pod.Authpass})
 		if err != nil {
 			log.Print(err.Error())
 			continue
@@ -221,19 +221,25 @@ func Remove(pod *parser.PodConfig) (bool, error) {
 // TreeWalk() will attempt to walk the pod list for a given pod's IPs.  The
 // idea here is to hopefully find all pods which are, due to misconfiguration
 // in sentinel, sharing one or more IPs with this pod.
-func TreeWalk(pod *parser.PodConfig) []parser.PodConfig {
+func TreeWalk(pod parser.PodConfig) []parser.PodConfig {
 	fmt.Printf("\nWalking Pod %s\n", pod.Name)
 	iso := true
 	var connecteds []parser.PodConfig
+	ants := make(map[string]bool)
 	for pname, rpod := range sentinel.ManagedPodConfigs {
 		if pname == pod.Name {
 			// skip self
+			fmt.Printf("[%s] Skipping (%s) self?\n", pod.Name, pname)
 			continue
 		}
 		master_address := fmt.Sprintf("%s:%s", pod.MasterIP, pod.MasterPort)
 		if pod.MasterIP == rpod.MasterIP {
 			fmt.Printf("[%s] Master IP also listed as master for %s\n", pod.Name, pname)
 			connecteds = append(connecteds, rpod)
+			_, exists := ants[master_address]
+			if !exists {
+				ants[master_address] = true
+			}
 			iso = false
 		}
 		for _, s := range rpod.KnownSlaves {
@@ -244,16 +250,29 @@ func TreeWalk(pod *parser.PodConfig) []parser.PodConfig {
 			}
 		}
 		for _, ms := range pod.KnownSlaves {
-			if strings.Contains(ms, rpod.MasterIP) {
+			rpma := fmt.Sprintf("%s;%s", rpod.MasterIP, rpod.MasterPort)
+			if ms == rpma {
 				fmt.Printf("[%s] Slave IP(%s) also listed as master for %s\n", pod.Name, ms, pname)
 				connecteds = append(connecteds, rpod)
 				iso = false
+				_, exists := ants[ms]
+				if !exists {
+					ants[ms] = true
+				}
+				_, exists = ants[rpma]
+				if !exists {
+					ants[rpma] = true
+				}
 			}
 			for _, s := range rpod.KnownSlaves {
 				if ms == s {
 					fmt.Printf("[%s] Slave IP(%s) is ALSO listed as slave of %s\n", pod.Name, ms, pname)
 					connecteds = append(connecteds, rpod)
 					iso = false
+					_, exists := ants[ms]
+					if !exists {
+						ants[ms] = true
+					}
 				}
 			}
 		}
@@ -261,7 +280,7 @@ func TreeWalk(pod *parser.PodConfig) []parser.PodConfig {
 	if iso {
 		fmt.Printf("[%s] Is properly isolated\n", pod.Name)
 	} else {
-		res, err := CheckAuth(pod)
+		res, err := CheckAuth(&pod)
 		if err != nil {
 			log.Print(err)
 			for k, v := range res {
@@ -273,6 +292,34 @@ func TreeWalk(pod *parser.PodConfig) []parser.PodConfig {
 		fmt.Printf("These pods are intermingled with %s:\n", pod.Name)
 		for _, mpod := range connecteds {
 			fmt.Printf("\t%s\n", mpod.Name)
+		}
+
+		fmt.Println("Now cross-checking auth on each IP")
+		for ant, _ := range ants {
+			ac, err := client.DialWithConfig(&client.DialConfig{Address: ant, Password: pod.Authpass})
+			if err != nil {
+				fmt.Printf("%s -> %s: no\n", pod.Name, ant)
+			} else {
+				if ac.Ping() == nil {
+					fmt.Printf("%s -> %s: yes\n", pod.Name, ant)
+				} else {
+					fmt.Printf("%s -> %s: no\n", pod.Name, ant)
+				}
+			}
+		}
+		for _, p := range connecteds {
+			for ant, _ := range ants {
+				ac, err := client.DialWithConfig(&client.DialConfig{Address: ant, Password: p.Authpass})
+				if err != nil {
+					fmt.Printf("%s -> %s: no\n", p.Name, ant)
+				} else {
+					if ac.Ping() == nil {
+						fmt.Printf("%s -> %s: yes\n", p.Name, ant)
+					} else {
+						fmt.Printf("%s -> %s: no\n", p.Name, ant)
+					}
+				}
+			}
 		}
 	}
 	return connecteds
