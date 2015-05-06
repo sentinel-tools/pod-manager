@@ -18,14 +18,14 @@ var sentinel parser.SentinelConfig
 func getPod(podname string) (*parser.PodConfig, error) {
 	var pod parser.PodConfig
 	var err error
-	sentinel, err = parser.ParseSentinelConfig(config.SentinelConfigFile)
+	sentinel, err = parser.ParseSentinelConfig(cfile)
 	if err != nil {
 		log.Print(err)
 		return &pod, err
 	}
 	pod, err = sentinel.GetPod(podname)
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
 	}
 	return &pod, err
 	return &pod, nil
