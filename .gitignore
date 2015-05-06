@@ -18,6 +18,7 @@ _cgo_gotypes.go
 _cgo_export.*
 
 _testmain.go
+pod-manager
 
 *.exe
 *.test
@@ -26,3 +27,4 @@ _testmain.go
 # vim
 *.swp
 *.swo
+
