@@ -8,9 +8,10 @@ For example, normally to remove the pod 'p2' from your bank of sentinels, you
 would have to iterate over each sentinel, and issue a 'sentinel remove p2'
 command to each one.
 
-With pod-manager you run `pod-manager -podname p2 -remove'.
+With pod-manager you run `pod-manager pod remove p2'.
 
-There are several other commands such as 'validatesentinels', 'failover', and 'reset'.
+There are several other sub-commands such as 'validatesentinels', 'failover',
+and 'reset'.
 
 # Operational Requirements
 When built with sentinel config file support, pod-manager requires read access
@@ -23,7 +24,7 @@ node-specific actions it will need access to the Redis instances in the pod.
 
 Displaying information about the Pod 'p2':
 ```shell
-# pod-manager -podname p2 -info
+# pod-manager pod info p2
 Podname: p2
 ========================
 Master: 127.0.0.1:6400
@@ -43,14 +44,14 @@ cli string: redis-cli -h 127.0.0.1 -p 6400 -a foo
 
 The same, but with JSON instead:
 ```shell
-pod-manager -podname p2 -info -jsonout
+# pod-manager pod info -j p2
 {"Name":"p2","MasterIP":"127.0.0.1","MasterPort":"6400","Authpass":"foo","KnownSentinels":["127.0.0.1:26380","127.0.0.1:26381","127.0.0.1:26379"],"KnownSlaves":["127.0.0.1:6401"],"Settings":null,"Quorum":"2","BadDirectives":null}
 ```
 
 
 Removing a pod from the sentinel cluster:
 ```shell
-pod-manager -podname=pod1 -removepod
+pod-manager pod remove pod1
 ```
 
 
@@ -61,7 +62,7 @@ the auth-pass entry. If any instances fail the check results of all
 checks will be displayed.
 
 #Sentinel Validation 
-By passing the `-validatesentinels` flag you can have pod-manager connect to
+By using the `validatesentinels` subcommand you can have pod-manager connect to
 each sentinel in the config file and request the master info from them. If any
 of the KnownSentinels do not have the pod in their list (ie. returning null or
 some other error) or are unreachable, pod-manager will tell you how many
@@ -83,3 +84,7 @@ connectivity to the pod, but reserve pod-manager access for those who manage
 sentinel and the pod. Different needs, different tools. This is much simpler
 than yet another user system in a tool.
 
+
+# Bash Completion
+Add the pod-manager_completion file to your bash completions directory (or
+source it directly) to add bash completion for pod-manager.
