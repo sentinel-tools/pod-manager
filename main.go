@@ -10,6 +10,7 @@ import (
 	"github.com/codegangsta/cli"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/sentinel-tools/sconf-parser"
+	"github.com/therealbill/libredis/client"
 )
 
 type LaunchConfig struct {
@@ -116,6 +117,22 @@ func main() {
 						cli.BoolFlag{
 							Name:  "json, j",
 							Usage: "Output only JSON",
+						},
+					},
+				},
+				{
+					Name:   "changepass",
+					Usage:  "Change pod's password",
+					Action: changePodAuthentication,
+					Before: beforePodCommand,
+					Flags: []cli.Flag{
+						cli.StringFlag{
+							Name:  "oldpass, o",
+							Usage: "Existing password",
+						},
+						cli.StringFlag{
+							Name:  "newpass, n",
+							Usage: "New password",
 						},
 					},
 				},
@@ -231,5 +248,72 @@ func CheckPodAuth(c *cli.Context) {
 		}
 	} else {
 		log.Print("Auth valid")
+	}
+}
+
+func changePodAuthentication(c *cli.Context) {
+	oldpass := c.String("oldpass")
+	newpass := c.String("newpass")
+	if pod.Authpass != oldpass {
+		log.Fatal("Old password given does not match configured password.")
+	}
+	log.Printf("Updating authentication information for master of %s", pod.Name)
+	conn := pod.Client()
+	conn.ConfigSet("masterauth", newpass)
+	conn.ConfigSet("requirepass", newpass)
+	pod.Authpass = newpass
+	slaves, err := pod.GetSlaves()
+	// Note: this only triggers if there was an error obtaining the list. If
+	// there was no error but there are no slaves, nothing will happen here.
+	if err != nil {
+		log.Printf("Unable to pull slaves for %s, reverting password change on master", pod.Name)
+		conn := pod.Client()
+		conn.ConfigSet("masterauth", oldpass)
+		conn.ConfigSet("requirepass", oldpass)
+		pod.Authpass = oldpass
+		log.Fatal("Error from Sentinel:", err)
+	}
+	switch len(slaves) {
+	case 1:
+		log.Print("Updating slave")
+	case 0:
+		log.Print("No slaves to update")
+	default:
+		log.Printf("Updating %d slaves", len(slaves))
+	}
+
+	updated := 0
+	for _, s := range slaves {
+		log.Printf("Updating Slave %s", s)
+		slave, err := client.DialWithConfig(&client.DialConfig{Address: s, Password: oldpass})
+		if err != nil {
+			log.Printf("Unable to connect to %s! You will need to manually adjust the password for this sentinel.", s)
+			continue
+		}
+		slave.ConfigSet("masterauth", newpass)
+		slave.ConfigSet("requirepass", newpass)
+		updated++
+	}
+	if len(slaves) > 0 {
+		log.Printf("%d of %d slaves updated", updated, len(slaves))
+	}
+	updated = 0
+	sentinels, err := pod.GetSentinels()
+	for _, s := range sentinels {
+		//log.Printf("Updating Sentinel %s", s)
+		sentinel, err := client.DialAddress(s)
+		if err != nil {
+			log.Printf("Unable to connect to %s! You will need to manually adjust the password for this sentinel.", s)
+			continue
+		}
+		sentinel.SentinelSetString(pod.Name, "auth-pass", newpass)
+		updated++
+	}
+	if updated != len(sentinels) {
+		log.Printf("%d of %d sentinels updated", updated, len(sentinels))
+		log.Printf("Not all Known Sentinels were updated! You will need to manually check and ensure the new password is set in the failed sentinels")
+	} else {
+		log.Printf("All %d Sentinels Updated.", updated)
+		log.Printf("You should now be able to validate with 'redis-cli -h %s -p %s -a %s PING'", pod.MasterIP, pod.MasterPort, newpass)
 	}
 }
