@@ -48,7 +48,7 @@ func main() {
 	app = cli.NewApp()
 	app.Name = "pod-manager"
 	app.Usage = "Interact with a Sentinel using configuration data"
-	app.Version = "0.5.1"
+	app.Version = "0.9.1"
 	app.EnableBashCompletion = true
 	author := cli.Author{Name: "Bill Anderson", Email: "therealbill@me.com"}
 	app.Authors = append(app.Authors, author)
@@ -136,10 +136,42 @@ func main() {
 						},
 					},
 				},
+				{
+					Name:   "sentinelset",
+					Usage:  "Set one of Sentinel's directives for the pod",
+					Action: SetSentinelPod,
+					Before: beforePodCommand,
+					Flags: []cli.Flag{
+						cli.StringFlag{
+							Name:  "directive, d",
+							Usage: "The directive to set",
+						},
+						cli.StringFlag{
+							Name:  "value, v",
+							Usage: "The value to set it to",
+						},
+					},
+				},
 			},
 		},
 	}
 	app.Run(os.Args)
+}
+
+func SetSentinelPod(c *cli.Context) {
+	sentinel_directive := c.String("directive")
+	value := c.String("value")
+	sentinels, err := pod.GetSentinels()
+	checkError(err)
+	for _, s := range sentinels {
+		//log.Printf("Updating Sentinel %s", s)
+		sentinel, err := client.DialAddress(s)
+		if err != nil {
+			log.Printf("Unable to connect to %s! You will need to manually adjust the directive's value for this sentinel.", s)
+			continue
+		}
+		sentinel.SentinelSetString(pod.Name, sentinel_directive, value)
+	}
 }
 
 func beforePodCommand(c *cli.Context) (err error) {
