@@ -47,7 +47,7 @@ func main() {
 	app = cli.NewApp()
 	app.Name = "pod-manager"
 	app.Usage = "Interact with a Sentinel using configuration data"
-	app.Version = "0.5.1"
+	app.Version = "0.9.1"
 	app.EnableBashCompletion = true
 	author := cli.Author{Name: "Bill Anderson", Email: "therealbill@me.com"}
 	app.Authors = append(app.Authors, author)
