@@ -45,10 +45,11 @@ func SetConfigFile(c *cli.Context) error {
 }
 
 func main() {
+	log.SetOutput(os.Stdout)
 	app = cli.NewApp()
 	app.Name = "pod-manager"
 	app.Usage = "Interact with a Sentinel using configuration data"
-	app.Version = "0.9.1"
+	app.Version = "0.9.2"
 	app.EnableBashCompletion = true
 	author := cli.Author{Name: "Bill Anderson", Email: "therealbill@me.com"}
 	app.Authors = append(app.Authors, author)
